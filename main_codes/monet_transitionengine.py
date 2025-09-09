@@ -1,129 +1,21 @@
-import numpy as np
+# main_codes/monet_transitionengine.py
+from moviepy.editor import concatenate_videoclips, vfx
 import random
-from typing import List, Dict, Any
-import math
 
 class TransitionEngine:
     def __init__(self):
-        self.transition_library = self._initialize_transition_library()
+        self.transition_library = ['fade', 'slide', 'cut', 'glitch']
 
-    def _initialize_transition_library(self) -> Dict[str, callable]:
-        """Initialize the massive library of 50+ professional transitions"""
-        return {
-            # Basic Transitions
-            'fade': self._fade_transition,
-            'dissolve': self._dissolve_transition,
-            'cut': self._cut_transition,
-
-            # Movement Transitions
-            'slide_left': self._slide_left_transition,
-            'slide_right': self._slide_right_transition,
-            'slide_up': self._slide_up_transition,
-            'slide_down': self._slide_down_transition,
-            'push_left': self._push_left_transition,
-            'push_right': self._push_right_transition,
-
-            # Zoom Transitions
-            'zoom_in': self._zoom_in_transition,
-            'zoom_out': self._zoom_out_transition,
-            'zoom_blur': self._zoom_blur_transition,
-            'dolly_zoom': self._dolly_zoom_transition,
-
-            # Rotation Transitions
-            'spin_clockwise': self._spin_clockwise_transition,
-            'spin_counter': self._spin_counter_transition,
-            'flip_horizontal': self._flip_horizontal_transition,
-            'flip_vertical': self._flip_vertical_transition,
-            'roll_left': self._roll_left_transition,
-            'roll_right': self._roll_right_transition,
-
-            # Digital Effects
-            'glitch': self._glitch_transition,
-            'digital_noise': self._digital_noise_transition,
-            'pixel_dissolve': self._pixel_dissolve_transition,
-            'rgb_split': self._rgb_split_transition,
-            'chromatic_aberration': self._chromatic_aberration_transition,
-            'data_moshing': self._data_moshing_transition,
-
-            # Light Effects
-            'light_leak': self._light_leak_transition,
-            'lens_flare': self._lens_flare_transition,
-            'flash_white': self._flash_white_transition,
-            'flash_black': self._flash_black_transition,
-            'strobe': self._strobe_transition,
-
-            # And 35+ more professional transitions...
-        }
-
-    def apply_transitions(self, clips: List[Dict], audio_analysis: Dict, style_preset: str, intensity: int):
-        """Apply intelligent transitions between clips based on audio analysis"""
+    def apply_transitions(self, processed_clips, audio_analysis, style_preset, transition_intensity):
+        clips = [c['clip'] for c in processed_clips]
         if not clips:
             return None
 
-        beats = audio_analysis.get('beats', [])
-        energy_levels = audio_analysis.get('energy_levels', [])
+        # Apply simple fade transitions
+        for i in range(len(clips)-1):
+            if random.random() < 0.5:  # 50% chance to fade
+                clips[i] = clips[i].crossfadeout(0.5)
+                clips[i+1] = clips[i+1].crossfadein(0.5)
 
-        # Add transitions to clips
-        for i, clip_info in enumerate(clips):
-            # Add transition if not the last clip
-            if i < len(clips) - 1:
-                # Select transition based on audio energy and style
-                transition_name = self._select_transition(
-                    style_preset,
-                    intensity,
-                    energy_levels[i % len(energy_levels)] if energy_levels else 0.5,
-                    beats,
-                    i
-                )
-
-                # Apply transition
-                clip_info['transition'] = transition_name
-                clip_info['transition_duration'] = 0.2 + (intensity / 10) * 0.3
-
-        # Return simulated final video
-        return {
-            'type': 'final_video',
-            'clips': clips,
-            'total_duration': sum(clip.get('duration', 2) for clip in clips),
-            'transitions_applied': len(clips) - 1
-        }
-
-    def _select_transition(self, style_preset: str, intensity: int, energy: float, beats: List[float], clip_index: int) -> str:
-        """Intelligently select transition based on style and audio analysis"""
-
-        # Define transition categories by style
-        style_transitions = {
-            'Viral TikTok': [
-                'glitch', 'rgb_split', 'flash_white', 'zoom_in', 'spin_clockwise',
-                'slide_left', 'slide_right', 'chromatic_aberration', 'strobe'
-            ],
-            'Cinematic': [
-                'fade', 'dissolve', 'push_left', 'push_right', 'dolly_zoom',
-                'motion_blur', 'light_leak', 'lens_flare'
-            ],
-            'Energetic': [
-                'zoom_in', 'zoom_out', 'spin_clockwise', 'flash_white', 'particle_burst',
-                'elastic_scale', 'slide_up', 'slide_down', 'strobe'
-            ],
-            # More style presets...
-        }
-
-        # Get transitions for the style
-        available_transitions = style_transitions.get(style_preset, list(self.transition_library.keys()))
-
-        # Adjust based on energy level
-        if energy > 0.7:  # High energy
-            high_energy_transitions = [
-                'glitch', 'flash_white', 'zoom_in', 'spin_clockwise', 'strobe',
-                'particle_burst', 'rgb_split', 'chromatic_aberration'
-            ]
-            available_transitions = [t for t in available_transitions if t in high_energy_transitions]
-
-        # Ensure we have transitions available
-        if not available_transitions:
-            available_transitions = ['fade', 'dissolve', 'cut']
-
-        return random.choice(available_transitions)
-
-    # Implementation of all 50+ transition methods...
-    # (Full code includes all transition implementations)
+        final_clip = concatenate_videoclips(clips, method="compose")
+        return {'clip': final_clip, 'clips': processed_clips, 'style_preset': style_preset}
