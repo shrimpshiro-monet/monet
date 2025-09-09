@@ -1,86 +1,50 @@
-# main_codes/monet_videoprocessor.py
-from moviepy.editor import VideoFileClip, concatenate_videoclips, vfx
-import numpy as np
+# main_codes/monet_transitionengine.py
+from moviepy.editor import concatenate_videoclips
 
-class VideoProcessor:
+class TransitionEngine:
     def __init__(self):
-        self.clips_cache = []
+        # transition_library can be expanded with more transition functions
+        self.transition_library = {
+            'fade': self._fade_transition,
+            'slide': self._slide_transition
+        }
 
-    def process_clips(self, video_paths, audio_analysis, style_preset, velocity_mode, transition_intensity):
+    def _fade_transition(self, clip1, clip2, duration=0.5):
+        """Simple fadeout/fadein between two clips"""
+        return clip1.crossfadeout(duration).set_end(clip1.duration)
+
+    def _slide_transition(self, clip1, clip2, duration=0.5):
+        """Dummy placeholder: currently just concatenates"""
+        return clip1.set_end(clip1.duration)
+
+    def apply_transitions(self, processed_clips, audio_analysis, style_preset, transition_intensity):
         """
-        Cut video clips based on audio beats and style
-        Returns list of clip dicts with processed VideoFileClip inside
+        Takes a list of clip dicts from VideoProcessor, applies transitions, and returns
+        a dict with 'clips' and 'final_video' ready for effects
         """
-        processed_clips = []
-        beats = audio_analysis.get('beats', [])
-        duration = audio_analysis.get('duration', 30)
+        if not processed_clips:
+            return None
 
-        if len(beats) < 2:
-            # fallback if beats not detected
-            beats = np.linspace(0, duration, 10)
+        final_clips = []
+        for i, clip_dict in enumerate(processed_clips):
+            clip = clip_dict['clip']
+            # assign a transition type (random for demo, can be smarter)
+            transition_type = 'fade'  # you can randomize or style-based
+            clip_dict['transition'] = transition_type
+            final_clips.append(clip)
 
-        for path in video_paths:
-            try:
-                clip = VideoFileClip(path)
-                clip_duration = clip.duration
+        # concatenate clips with crossfade
+        try:
+            if len(final_clips) > 1:
+                # Apply simple fade transitions
+                final_video = concatenate_videoclips(final_clips, method="compose", padding=-0.1)
+            else:
+                final_video = final_clips[0]
+        except Exception as e:
+            print(f"Error applying transitions: {e}")
+            final_video = final_clips[0]
 
-                # Split clip by beats
-                clip_starts = np.clip(beats, 0, clip_duration-0.01)
-                clip_ends = np.append(clip_starts[1:], clip_duration)
-
-                for start, end in zip(clip_starts, clip_ends):
-                    subclip = clip.subclip(start, end)
-
-                    # Optional reverse
-                    if np.random.rand() < 0.15:
-                        subclip = subclip.fx(vfx.time_mirror)
-
-                    # Speed adjustment
-                    speed_factor = self._calculate_speed_factor(velocity_mode, audio_analysis, start)
-                    subclip = subclip.fx(vfx.speedx, speed_factor)
-
-                    processed_clips.append({
-                        'clip': subclip,
-                        'start_time': start,
-                        'duration': end-start,
-                        'speed_factor': speed_factor,
-                        'transition': None  # will be filled by TransitionEngine
-                    })
-            except Exception as e:
-                print(f"Error processing {path}: {e}")
-                continue
-
-        return processed_clips
-
-    def _calculate_speed_factor(self, velocity_mode, audio_analysis, clip_index):
-        tempo = audio_analysis.get('tempo', 120)
-        if velocity_mode == "AI Auto":
-            return np.clip(1.0 + (tempo-120)/120, 0.5, 2.0)
-        elif velocity_mode == "Beat Sync":
-            return 1.0 + 0.5*np.sin(clip_index)
-        elif velocity_mode == "Smooth":
-            return 1.0
-        elif velocity_mode == "Aggressive":
-            return np.random.choice([0.5, 0.7, 1.5, 2.0])
-        else:
-            return 1.0
-
-    def add_effects(self, final_video, enable_text_overlays, enable_effects, style_preset):
-        """
-        Apply effects to the final project.
-        Expects final_video as dict with 'clips' or single VideoFileClip
-        """
-        if isinstance(final_video, dict):
-            clips = final_video.get('clips', [])
-            for i, clip_dict in enumerate(clips):
-                clip = clip_dict['clip']
-                if enable_effects:
-                    clip = clip.fx(vfx.lum_contrast, 0, 50, 128)
-                clip_dict['clip'] = clip
-            final_video['clips'] = clips
-        else:
-            clip = final_video
-            if enable_effects:
-                clip = clip.fx(vfx.lum_contrast, 0, 50, 128)
-            final_video = clip
-        return final_video
+        return {
+            'clips': processed_clips,
+            'final_video': final_video
+        }
