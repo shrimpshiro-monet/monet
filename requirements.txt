@@ -1,8 +1,8 @@
-streamlit
-moviepy
-librosa
+streamlit==1.30.0
+moviepy==2.0.0.dev1
 numpy
 scipy
+librosa
 tqdm
 python-dotenv
 pydub
