@@ -1,5 +1,6 @@
 import streamlit as st
-import os
+import sys, os
+sys.path.append(os.path.join(os.path.dirname(__file__), "main_codes"))
 import tempfile
 import time
 import numpy as np
@@ -8,6 +9,11 @@ import random
 # Force MoviePy to detect ffmpeg
 import imageio
 import imageio_ffmpeg  # ensures ffmpeg binary is available
+
+from main_codes.monet_videoprocessor import VideoProcessor
+from main_codes.monet_audioanalyzer import AudioAnalyzer
+from main_codes.monet_exportmanager import ExportManager
+from main_codes.monet_transitionengine import TransitionEngine
 
 from moviepy.editor import VideoFileClip, concatenate_videoclips, vfx
 from pydub import AudioSegment
