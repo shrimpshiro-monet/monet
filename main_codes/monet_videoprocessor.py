@@ -1,7 +1,8 @@
+import imageio_ffmpeg  # ensures ffmpeg binary is available
 from moviepy.editor import VideoFileClip, concatenate_videoclips, vfx
 import numpy as np
 import random
-import imageio_ffmpeg
+
 
 class VideoProcessor:
     def __init__(self):
