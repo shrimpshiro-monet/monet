@@ -1,10 +1,10 @@
 streamlit
-moviepy
-imageio-ffmpeg
-pydub
+moviepy==2.0.3
+imageio-ffmpeg==0.4.10
+librosa
 numpy
 scipy
 tqdm
 python-dotenv
-pillow<10
-librosa
+pydub
+Pillow<10
