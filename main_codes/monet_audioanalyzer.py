@@ -1,20 +1,29 @@
 # main_codes/monet_audioanalyzer.py
-from pydub import AudioSegment
+import librosa
 import numpy as np
 
 class AudioAnalyzer:
     def analyze_audio(self, audio_path):
-        # Load audio
-        audio = AudioSegment.from_file(audio_path)
-        duration = len(audio) / 1000  # in seconds
+        """
+        Analyze the audio and return:
+        - duration
+        - beats (timestamps in seconds)
+        - tempo (BPM)
+        - energy_levels (optional for speed factors)
+        """
+        y, sr = librosa.load(audio_path, sr=None, mono=True)  # Load audio as mono
+        tempo, beat_frames = librosa.beat.beat_track(y=y, sr=sr, units='frames')
+        
+        # Convert beat frames to time in seconds
+        beats = librosa.frames_to_time(beat_frames, sr=sr).tolist()
 
-        # Very simple beat detection (placeholder)
-        num_beats = max(5, int(duration / 2))
-        beats = np.linspace(0, duration, num_beats).tolist()
+        # Compute energy (RMS)
+        hop_length = 512
+        rms = librosa.feature.rms(y=y, hop_length=hop_length)[0]
+        # Normalize energy
+        energy_levels = (rms / np.max(rms)).tolist() if len(rms) > 0 else [1.0] * len(beats)
 
-        # Simulated tempo & energy
-        tempo = 120  # bpm
-        energy_levels = np.random.rand(num_beats).tolist()
+        duration = librosa.get_duration(y=y, sr=sr)
 
         return {
             "duration": duration,
