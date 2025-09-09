@@ -1,16 +1,16 @@
 import streamlit as st
 import os
 import tempfile
-import json
-from pathlib import Path
+import time
 import numpy as np
 from main_codes.monet_videoprocessor import VideoProcessor
 from main_codes.monet_audioanalyzer import AudioAnalyzer
 from main_codes.monet_exportmanager import ExportManager
 from main_codes.monet_transitionengine import TransitionEngine
-import time
 
+# ---------------------------
 # Initialize session state
+# ---------------------------
 if 'video_processor' not in st.session_state:
     st.session_state.video_processor = VideoProcessor()
 if 'audio_analyzer' not in st.session_state:
@@ -23,13 +23,20 @@ if 'uploaded_videos' not in st.session_state:
     st.session_state.uploaded_videos = []
 if 'uploaded_audio' not in st.session_state:
     st.session_state.uploaded_audio = None
+if 'reference_video' not in st.session_state:
+    st.session_state.reference_video = None
 if 'processed_project' not in st.session_state:
     st.session_state.processed_project = None
 if 'chat_messages' not in st.session_state:
     st.session_state.chat_messages = []
 if 'export_count' not in st.session_state:
     st.session_state.export_count = 0
+if 'editing_clip' not in st.session_state:
+    st.session_state.editing_clip = None
 
+# ---------------------------
+# Main Streamlit App
+# ---------------------------
 def main():
     st.set_page_config(
         page_title="Monet - AI Video Editor",
@@ -41,70 +48,59 @@ def main():
     st.title("🎬 Monet - AI Video Editor")
     st.subheader("Professional AI-Powered Video Editing with 50+ Transitions")
 
-    # Sidebar for uploads and settings
+    sidebar()
+    main_area()
+
+# ---------------------------
+# Sidebar for uploads & settings
+# ---------------------------
+def sidebar():
     with st.sidebar:
         st.header("📁 Upload Media")
 
         # Video uploads
-        st.subheader("Video Clips")
         uploaded_videos = st.file_uploader(
-            "Upload video clips (MP4)",
-            type=['mp4'],
-            accept_multiple_files=True,
-            key="video_uploader"
+            "Upload video clips (MP4)", type=['mp4'], accept_multiple_files=True, key="video_uploader"
         )
-
         if uploaded_videos:
             st.session_state.uploaded_videos = uploaded_videos
             st.success(f"✅ {len(uploaded_videos)} video(s) uploaded")
 
         # Audio upload
-        st.subheader("Background Music")
         uploaded_audio = st.file_uploader(
-            "Upload music file (MP3, WAV)",
-            type=['mp3', 'wav'],
-            key="audio_uploader"
+            "Upload music file (MP3, WAV)", type=['mp3', 'wav'], key="audio_uploader"
         )
-
         if uploaded_audio:
             st.session_state.uploaded_audio = uploaded_audio
             st.success("✅ Audio uploaded")
 
-        # Reference video (optional)
-        st.subheader("Reference Video (Optional)")
+        # Optional reference video
         reference_video = st.file_uploader(
-            "Upload reference video for style mimicry",
-            type=['mp4'],
-            key="reference_uploader"
+            "Upload reference video (Optional)", type=['mp4'], key="reference_uploader"
         )
+        if reference_video:
+            st.session_state.reference_video = reference_video
+            st.success("✅ Reference video uploaded")
 
-        # Style settings
+        # Style & editing settings
         st.header("🎨 Style Settings")
-
         style_preset = st.selectbox(
             "Style Preset",
             ["Viral TikTok", "Cinematic", "Energetic", "Smooth", "Glitch", "Retro", "Custom"]
         )
-
         velocity_mode = st.selectbox(
             "Velocity Mode",
             ["AI Auto", "Beat Sync", "Smooth", "Aggressive", "Custom"]
         )
-
-        transition_intensity = st.slider(
-            "Transition Intensity",
-            min_value=1,
-            max_value=10,
-            value=7
-        )
-
+        transition_intensity = st.slider("Transition Intensity", min_value=1, max_value=10, value=7)
         enable_text_overlays = st.checkbox("Enable Text Overlays", value=True)
         enable_effects = st.checkbox("Enable Visual Effects", value=True)
         enable_reverse_clips = st.checkbox("Enable Reverse Clips", value=True)
 
-        # Process button
-        if st.button("🚀 Process Video", type="primary", use_container_width=True):
-            if st.session_state.uploaded_videos and st.session_state.uploaded_audio:
+        if st.button("🚀 Process Video", use_container_width=True):
+            if not st.session_state.uploaded_videos or not st.session_state.uploaded_audio:
+                st.error("Please upload at least one video and an audio file")
+            else:
                 process_video(
                     style_preset,
                     velocity_mode,
@@ -112,152 +108,99 @@ def main():
                     enable_text_overlays,
                     enable_effects,
                     enable_reverse_clips,
-                    reference_video
+                    st.session_state.reference_video
                 )
-            else:
-                st.error("Please upload at least one video and an audio file")
 
-    # Main content area
+# ---------------------------
+# Main content area
+# ---------------------------
+def main_area():
     col1, col2 = st.columns([2, 1])
 
     with col1:
-        # Timeline and preview
         st.header("🎬 Timeline & Preview")
-
         if st.session_state.processed_project:
             display_timeline_preview()
         else:
             st.info("Upload media and click 'Process Video' to see timeline and preview")
-
-            # Show upload status
-            if st.session_state.uploaded_videos:
-                st.write("📹 Uploaded Videos:")
-                for i, video in enumerate(st.session_state.uploaded_videos):
-                    st.write(f"  • {video.name}")
-
-            if st.session_state.uploaded_audio:
-                st.write(f"🎵 Uploaded Audio: {st.session_state.uploaded_audio.name}")
+            show_upload_status()
 
     with col2:
-        # AI Chat Interface
-        st.header("🤖 AI Assistant")
+        export_section()
 
-        # Display chat messages
-        chat_container = st.container()
-        with chat_container:
-            for message in st.session_state.chat_messages:
-                with st.chat_message(message["role"]):
-                    st.write(message["content"])
+# ---------------------------
+# Helper UI functions
+# ---------------------------
+def show_upload_status():
+    if st.session_state.uploaded_videos:
+        st.write("📹 Uploaded Videos:")
+        for video in st.session_state.uploaded_videos:
+            st.write(f"• {video.name}")
+    if st.session_state.uploaded_audio:
+        st.write(f"🎵 Uploaded Audio: {st.session_state.uploaded_audio.name}")
 
-        # Chat input
-        if prompt := st.chat_input("Ask me to edit your video..."):
-            # Add user message
-            st.session_state.chat_messages.append({"role": "user", "content": prompt})
+def export_section():
+    st.header("📤 Export")
+    export_quality = st.selectbox("Export Quality", ["Low (480p)", "Medium (720p)", "High (1080p)", "Ultra (4K)"])
+    is_premium = False
+    max_exports = 3 if not is_premium else float('inf')
+    export_disabled = st.session_state.export_count >= max_exports and not is_premium
 
-            # Process AI response
-            with st.chat_message("assistant"):
-                with st.spinner("Processing..."):
-                    response = st.session_state.ai_chat.process_command(
-                        prompt,
-                        st.session_state.processed_project
-                    )
-                    st.write(response["message"])
+    if export_disabled:
+        st.warning("🔒 Free users limited to 3 exports. Upgrade for unlimited exports.")
 
-                    # Apply changes if any
-                    if response.get("changes"):
-                        apply_ai_changes(response["changes"])
+    if st.button("🎬 Export Video", disabled=not st.session_state.processed_project or export_disabled, use_container_width=True):
+        export_video(export_quality)
 
-            st.session_state.chat_messages.append({
-                "role": "assistant",
-                "content": response["message"]
-            })
-
-        # Export section
-        st.header("📤 Export")
-
-        export_quality = st.selectbox(
-            "Export Quality",
-            ["Low (480p)", "Medium (720p)", "High (1080p)", "Ultra (4K)"]
-        )
-
-        # Check export limits
-        is_premium = False  # This would be determined by user authentication
-        max_exports = 3 if not is_premium else float('inf')
-
-        export_disabled = st.session_state.export_count >= max_exports and not is_premium
-
-        if export_disabled:
-            st.warning("🔒 Free users limited to 3 exports. Upgrade for unlimited exports.")
-
-        if st.button(
-            "🎬 Export Video",
-            disabled=not st.session_state.processed_project or export_disabled,
-            use_container_width=True
-        ):
-            export_video(export_quality)
-
+# ---------------------------
+# Core functions
+# ---------------------------
 def process_video(style_preset, velocity_mode, transition_intensity, enable_text_overlays, enable_effects, enable_reverse_clips, reference_video):
-    """Process the uploaded videos and audio"""
     progress_bar = st.progress(0)
     status_text = st.empty()
-
     try:
-        # Step 1: Save uploaded files
-        status_text.text("Saving uploaded files...")
+        # Save uploaded videos
         video_paths = []
-
         for i, video in enumerate(st.session_state.uploaded_videos):
-            temp_path = f"temp_video_{i}.mp4"
+            temp_path = os.path.join(tempfile.gettempdir(), f"temp_video_{i}.mp4")
             with open(temp_path, "wb") as f:
                 f.write(video.getbuffer())
             video_paths.append(temp_path)
 
-        audio_path = "temp_audio.mp3"
+        # Save uploaded audio
+        audio_path = os.path.join(tempfile.gettempdir(), "temp_audio.mp3")
         with open(audio_path, "wb") as f:
             f.write(st.session_state.uploaded_audio.getbuffer())
 
         progress_bar.progress(20)
-
-        # Step 2: Analyze audio
-        status_text.text("Analyzing audio beats and tempo...")
+        status_text.text("Analyzing audio...")
         audio_analysis = st.session_state.audio_analyzer.analyze_audio(audio_path)
         progress_bar.progress(40)
 
-        # Step 3: Process videos
+        # Process video clips
         status_text.text("Processing video clips...")
         processed_clips = st.session_state.video_processor.process_clips(
-            video_paths,
-            audio_analysis,
-            style_preset,
-            velocity_mode,
-            transition_intensity
+            video_paths, audio_analysis, style_preset, velocity_mode, transition_intensity
         )
         progress_bar.progress(60)
 
-        # Step 4: Apply transitions
-        status_text.text("Applying professional transitions...")
+        # Apply transitions
+        status_text.text("Applying transitions...")
         final_video = st.session_state.transition_engine.apply_transitions(
-            processed_clips,
-            audio_analysis,
-            style_preset,
-            transition_intensity
+            processed_clips, audio_analysis, style_preset, transition_intensity
         )
         progress_bar.progress(80)
 
-        # Step 5: Add effects and overlays
+        # Add effects & overlays
         if enable_effects or enable_text_overlays:
-            status_text.text("Adding effects and overlays...")
+            status_text.text("Adding effects & overlays...")
             final_video = st.session_state.video_processor.add_effects(
-                final_video,
-                enable_text_overlays,
-                enable_effects,
-                style_preset
+                final_video, enable_text_overlays, enable_effects, style_preset
             )
 
         progress_bar.progress(100)
         status_text.text("✅ Processing complete!")
 
-        # Store processed project
         st.session_state.processed_project = {
             'video': final_video,
             'audio_analysis': audio_analysis,
@@ -270,102 +213,66 @@ def process_video(style_preset, velocity_mode, transition_intensity, enable_text
                 'enable_effects': enable_effects
             }
         }
-
         time.sleep(1)
         progress_bar.empty()
         status_text.empty()
         st.rerun()
-
     except Exception as e:
-        st.error(f"Error processing video: {str(e)}")
+        st.error(f"Error processing video: {e}")
         progress_bar.empty()
         status_text.empty()
 
 def display_timeline_preview():
-    """Display the timeline and video preview"""
     project = st.session_state.processed_project
-
-    # Timeline visualization
     st.subheader("🎵 Audio Timeline")
-
-    # Display beat markers and clips
     audio_analysis = project['audio_analysis']
     beats = audio_analysis.get('beats', [])
-
-    # Create a simple timeline visualization
-    timeline_length = int(audio_analysis.get('duration', 30))
-    timeline_data = np.zeros(timeline_length * 10)  # 10 points per second
-
+    duration = int(audio_analysis.get('duration', 30))
+    timeline_data = np.zeros(duration * 10)
     for beat in beats:
-        if beat < len(timeline_data) / 10:
-            timeline_data[int(beat * 10)] = 1
-
+        if beat < len(timeline_data)/10:
+            timeline_data[int(beat*10)] = 1
     st.line_chart(timeline_data)
 
-    # Clip information
     st.subheader("📹 Clips")
-    clips = project['clips']
-
-    for i, clip in enumerate(clips):
+    for i, clip in enumerate(project['clips']):
         with st.expander(f"Clip {i+1} - {clip.get('duration', 0):.2f}s"):
             col1, col2, col3 = st.columns(3)
-
             with col1:
                 st.write(f"**Start:** {clip.get('start_time', 0):.2f}s")
                 st.write(f"**Duration:** {clip.get('duration', 0):.2f}s")
-
             with col2:
                 st.write(f"**Transition:** {clip.get('transition', 'None')}")
                 st.write(f"**Speed:** {clip.get('speed_factor', 1.0)}x")
-
             with col3:
                 if st.button(f"Edit Clip {i+1}", key=f"edit_clip_{i}"):
                     edit_clip(i)
 
-    # Video preview placeholder
-    st.subheader("🎬 Preview")
-    st.info("Video preview will be displayed here. Click export to generate the final video.")
-
 def edit_clip(clip_index):
-    """Edit a specific clip"""
     st.session_state.editing_clip = clip_index
     st.rerun()
 
 def apply_ai_changes(changes):
-    """Apply changes suggested by AI"""
     try:
-        # This would apply the changes to the project
-        # Implementation would depend on the specific changes
         st.success("AI changes applied successfully!")
         st.rerun()
     except Exception as e:
-        st.error(f"Error applying AI changes: {str(e)}")
+        st.error(f"Error applying AI changes: {e}")
 
 def export_video(quality):
-    """Export the final video"""
     if not st.session_state.processed_project:
         st.error("No processed video to export")
         return
-
     progress_bar = st.progress(0)
     status_text = st.empty()
-
     try:
         status_text.text("Exporting video...")
-
-        # Export the video
         output_path = st.session_state.export_manager.export_video(
-            st.session_state.processed_project,
-            quality,
-            progress_callback=lambda p: progress_bar.progress(p)
+            st.session_state.processed_project, quality, progress_callback=lambda p: progress_bar.progress(p)
         )
-
-        # Increment export count
         st.session_state.export_count += 1
-
         status_text.text("✅ Export complete!")
 
-        # Provide download
         with open(output_path, 'rb') as f:
             st.download_button(
                 label="📥 Download Video",
@@ -373,14 +280,13 @@ def export_video(quality):
                 file_name=f"monet_export_{int(time.time())}.mp4",
                 mime="video/mp4"
             )
-
         progress_bar.empty()
         status_text.empty()
-
     except Exception as e:
-        st.error(f"Export failed: {str(e)}")
+        st.error(f"Export failed: {e}")
         progress_bar.empty()
         status_text.empty()
 
+# ---------------------------
 if __name__ == "__main__":
     main()
