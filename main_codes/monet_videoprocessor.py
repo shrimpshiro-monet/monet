@@ -1,5 +1,4 @@
 import imageio
-imageio.plugins.ffmpeg.download()  # ensures ffmpeg binaries are available
 from moviepy.editor import VideoFileClip, concatenate_videoclips, vfx
 import numpy as np
 import random
