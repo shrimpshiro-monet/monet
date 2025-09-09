@@ -3,15 +3,98 @@ import os
 import tempfile
 import time
 import numpy as np
-from pathlib import Path
+import random
 
-from main_codes.monet_videoprocessor import VideoProcessor
-from main_codes.monet_audioanalyzer import AudioAnalyzer
-from main_codes.monet_exportmanager import ExportManager
-from main_codes.monet_transitionengine import TransitionEngine
+# Force MoviePy to detect ffmpeg
+import imageio
+import imageio_ffmpeg  # ensures ffmpeg binary is available
+
+from moviepy.editor import VideoFileClip, concatenate_videoclips, vfx
+from pydub import AudioSegment
 
 # ---------------------------
-# Initialize session state
+# Simulated / real engines
+# ---------------------------
+class VideoProcessor:
+    def process_clips(self, video_paths, audio_analysis, style_preset, velocity_mode, transition_intensity):
+        processed_clips = []
+        beats = audio_analysis.get("beats", [])
+        if len(beats) < 2:
+            beats = np.linspace(0, audio_analysis.get("duration", 30), 10)
+
+        for i, path in enumerate(video_paths):
+            try:
+                clip = VideoFileClip(path)
+
+                # Optional reverse (15% chance)
+                if random.random() < 0.15:
+                    clip = clip.fx(vfx.time_mirror)
+
+                # Speed factor
+                speed_factor = self._calculate_speed(velocity_mode, i)
+                clip = clip.fx(vfx.speedx, speed_factor)
+
+                processed_clips.append({
+                    "clip": clip,
+                    "original_path": path,
+                    "speed_factor": speed_factor,
+                    "start_time": 0,
+                    "duration": clip.duration,
+                    "transition": "none",
+                    "style_preset": style_preset
+                })
+            except Exception as e:
+                print(f"Error processing {path}: {e}")
+                continue
+        return processed_clips
+
+    def _calculate_speed(self, velocity_mode, clip_index):
+        if velocity_mode == "AI Auto":
+            return 1.0 + random.uniform(-0.1, 0.3)
+        elif velocity_mode == "Beat Sync":
+            return 1.0 + 0.5 * np.sin(clip_index)
+        elif velocity_mode == "Smooth":
+            return 1.0
+        elif velocity_mode == "Aggressive":
+            return random.choice([0.5, 0.7, 1.5, 2.0])
+        return 1.0
+
+    def add_effects(self, final_video, enable_text_overlays, enable_effects, style_preset):
+        # dummy effect
+        if enable_effects:
+            final_video['clip'] = final_video['clip'].fx(vfx.lum_contrast, 0, 50, 128)
+        return final_video
+
+class AudioAnalyzer:
+    def analyze_audio(self, audio_path):
+        audio = AudioSegment.from_file(audio_path)
+        duration = len(audio)/1000
+        num_beats = max(5, int(duration/2))
+        beats = np.linspace(0, duration, num_beats).tolist()
+        return {
+            "duration": duration,
+            "beats": beats,
+            "tempo": 120,
+        }
+
+class TransitionEngine:
+    def apply_transitions(self, clips, audio_analysis, style_preset, transition_intensity):
+        for clip in clips:
+            clip["transition"] = random.choice(["fade", "slide", "none"])
+        return {"clip": concatenate_videoclips([c["clip"] for c in clips]), "clips": clips}
+
+class ExportManager:
+    def export_video(self, project, quality, progress_callback):
+        final_clip = project['clip']
+        output_file = os.path.join(tempfile.gettempdir(), f"monet_export_{int(time.time())}.mp4")
+        final_clip.write_videofile(output_file, codec="libx264")
+        for p in range(0, 101, 20):
+            time.sleep(0.2)
+            progress_callback(p)
+        return output_file
+
+# ---------------------------
+# Session state
 # ---------------------------
 if 'video_processor' not in st.session_state:
     st.session_state.video_processor = VideoProcessor()
@@ -25,248 +108,112 @@ if 'uploaded_videos' not in st.session_state:
     st.session_state.uploaded_videos = []
 if 'uploaded_audio' not in st.session_state:
     st.session_state.uploaded_audio = None
-if 'reference_video' not in st.session_state:
-    st.session_state.reference_video = None
 if 'processed_project' not in st.session_state:
     st.session_state.processed_project = None
 if 'export_count' not in st.session_state:
     st.session_state.export_count = 0
-if 'editing_clip' not in st.session_state:
-    st.session_state.editing_clip = None
 
 # ---------------------------
-# Main Streamlit App
+# Streamlit UI
 # ---------------------------
 def main():
-    st.set_page_config(
-        page_title="Monet - AI Video Editor",
-        page_icon="🎬",
-        layout="wide",
-        initial_sidebar_state="expanded"
-    )
+    st.set_page_config(page_title="Monet AI Editor", page_icon="🎬", layout="wide")
     st.title("🎬 Monet - AI Video Editor")
-    st.subheader("Professional AI-Powered Video Editing with 50+ Transitions")
 
     sidebar()
     main_area()
 
-# ---------------------------
-# Sidebar for uploads & settings
-# ---------------------------
 def sidebar():
     with st.sidebar:
         st.header("📁 Upload Media")
-
-        uploaded_videos = st.file_uploader(
-            "Upload video clips (MP4)", type=['mp4'], accept_multiple_files=True
-        )
+        uploaded_videos = st.file_uploader("Upload video clips (MP4)", type=['mp4'], accept_multiple_files=True)
         if uploaded_videos:
             st.session_state.uploaded_videos = uploaded_videos
-            st.success(f"✅ {len(uploaded_videos)} video(s) uploaded")
 
-        uploaded_audio = st.file_uploader(
-            "Upload music file (MP3, WAV)", type=['mp3', 'wav']
-        )
+        uploaded_audio = st.file_uploader("Upload audio (MP3/WAV)", type=['mp3','wav'])
         if uploaded_audio:
             st.session_state.uploaded_audio = uploaded_audio
-            st.success("✅ Audio uploaded")
 
-        reference_video = st.file_uploader(
-            "Upload reference video (Optional)", type=['mp4']
-        )
-        if reference_video:
-            st.session_state.reference_video = reference_video
-            st.success("✅ Reference video uploaded")
-
-        # Style & editing settings
-        st.header("🎨 Style Settings")
-        style_preset = st.selectbox(
-            "Style Preset",
-            ["Viral TikTok", "Cinematic", "Energetic", "Smooth", "Glitch", "Retro", "Custom"]
-        )
-        velocity_mode = st.selectbox(
-            "Velocity Mode",
-            ["AI Auto", "Beat Sync", "Smooth", "Aggressive", "Custom"]
-        )
+        style_preset = st.selectbox("Style Preset", ["Viral TikTok","Cinematic","Energetic","Smooth","Glitch","Retro","Custom"])
+        velocity_mode = st.selectbox("Velocity Mode", ["AI Auto","Beat Sync","Smooth","Aggressive","Custom"])
         transition_intensity = st.slider("Transition Intensity", 1, 10, 7)
-        enable_text_overlays = st.checkbox("Enable Text Overlays", True)
-        enable_effects = st.checkbox("Enable Visual Effects", True)
-        enable_reverse_clips = st.checkbox("Enable Reverse Clips", True)
 
-        if st.button("🚀 Process Video", use_container_width=True):
+        if st.button("🚀 Process Video"):
             if not st.session_state.uploaded_videos or not st.session_state.uploaded_audio:
-                st.error("Please upload at least one video and an audio file")
+                st.error("Upload at least one video and audio")
             else:
-                process_video(
-                    style_preset,
-                    velocity_mode,
-                    transition_intensity,
-                    enable_text_overlays,
-                    enable_effects,
-                    enable_reverse_clips,
-                    st.session_state.reference_video
-                )
+                process_video(style_preset, velocity_mode, transition_intensity)
 
-# ---------------------------
-# Main content area
-# ---------------------------
 def main_area():
-    col1, col2 = st.columns([2, 1])
-
+    col1, col2 = st.columns([2,1])
     with col1:
-        st.header("🎬 Timeline & Preview")
+        st.header("🎬 Preview")
         if st.session_state.processed_project:
-            display_timeline_preview()
+            clips = st.session_state.processed_project.get('clips', [])
+            for i, clip in enumerate(clips):
+                st.write(f"Clip {i+1}: {clip['original_path']}, Duration: {clip['duration']:.2f}s")
         else:
-            st.info("Upload media and click 'Process Video' to see timeline and preview")
-            show_upload_status()
-
+            st.info("Upload media and process video to preview")
     with col2:
         export_section()
 
-# ---------------------------
-# Helper UI functions
-# ---------------------------
-def show_upload_status():
-    if st.session_state.uploaded_videos:
-        st.write("📹 Uploaded Videos:")
-        for video in st.session_state.uploaded_videos:
-            st.write(f"• {video.name}")
-    if st.session_state.uploaded_audio:
-        st.write(f"🎵 Uploaded Audio: {st.session_state.uploaded_audio.name}")
-
 def export_section():
-    st.header("📤 Export")
-    export_quality = st.selectbox("Export Quality", ["Low (480p)", "Medium (720p)", "High (1080p)", "Ultra (4K)"])
-    max_exports = 3
-    export_disabled = st.session_state.export_count >= max_exports
-    if export_disabled:
-        st.warning("🔒 Free users limited to 3 exports.")
-
-    if st.button("🎬 Export Video", disabled=not st.session_state.processed_project or export_disabled, use_container_width=True):
-        export_video(export_quality)
+    if st.session_state.processed_project:
+        if st.button("🎬 Export Video"):
+            export_video()
 
 # ---------------------------
 # Core processing
 # ---------------------------
-def process_video(style_preset, velocity_mode, transition_intensity, enable_text_overlays, enable_effects, enable_reverse_clips, reference_video):
-    progress_bar = st.progress(0)
-    status_text = st.empty()
+def process_video(style_preset, velocity_mode, transition_intensity):
+    progress = st.progress(0)
     try:
-        # Save uploaded files to temp
-        status_text.text("Saving uploaded media...")
         video_paths = []
-        for video in st.session_state.uploaded_videos:
-            temp_path = os.path.join(tempfile.gettempdir(), video.name)
-            with open(temp_path, "wb") as f:
-                f.write(video.getbuffer())
-            video_paths.append(temp_path)
+        for v in st.session_state.uploaded_videos:
+            path = os.path.join(tempfile.gettempdir(), v.name)
+            with open(path,"wb") as f:
+                f.write(v.getbuffer())
+            video_paths.append(path)
 
-        audio_path = None
-        if st.session_state.uploaded_audio:
-            audio = st.session_state.uploaded_audio
-            audio_path = os.path.join(tempfile.gettempdir(), audio.name)
-            with open(audio_path, "wb") as f:
-                f.write(audio.getbuffer())
+        audio_file = st.session_state.uploaded_audio
+        audio_path = os.path.join(tempfile.gettempdir(), audio_file.name)
+        with open(audio_path,"wb") as f:
+            f.write(audio_file.getbuffer())
 
-        progress_bar.progress(10)
-
-        # Audio analysis
-        status_text.text("Analyzing audio...")
+        progress.progress(10)
+        st.info("Analyzing audio...")
         audio_analysis = st.session_state.audio_analyzer.analyze_audio(audio_path)
-        progress_bar.progress(30)
+        progress.progress(30)
 
-        # Process video clips
-        status_text.text("Processing video clips...")
-        processed_clips = st.session_state.video_processor.process_clips(
-            video_paths, audio_analysis, style_preset, velocity_mode, transition_intensity
-        )
-        progress_bar.progress(60)
+        st.info("Processing video clips...")
+        clips = st.session_state.video_processor.process_clips(video_paths, audio_analysis, style_preset, velocity_mode, transition_intensity)
+        progress.progress(60)
 
-        # Apply transitions
-        status_text.text("Applying transitions...")
-        project_with_transitions = st.session_state.transition_engine.apply_transitions(
-            processed_clips, audio_analysis, style_preset, transition_intensity
-        )
-        progress_bar.progress(80)
+        st.info("Applying transitions...")
+        final_project = st.session_state.transition_engine.apply_transitions(clips, audio_analysis, style_preset, transition_intensity)
+        progress.progress(90)
 
-        final_video = project_with_transitions['final_video']
-
-        # Apply effects & overlays
-        if enable_effects or enable_text_overlays:
-            status_text.text("Adding effects & overlays...")
-            final_video = st.session_state.video_processor.add_effects(
-                project_with_transitions, enable_text_overlays, enable_effects, style_preset
-            )
-
-        # Save project
-        st.session_state.processed_project = final_video
-        progress_bar.progress(100)
-        status_text.text("✅ Processing complete!")
-        time.sleep(1)
-        progress_bar.empty()
-        status_text.empty()
-        st.rerun()
+        st.info("Adding effects...")
+        final_project = st.session_state.video_processor.add_effects(final_project, True, True, style_preset)
+        st.session_state.processed_project = final_project
+        progress.progress(100)
+        st.success("✅ Processing complete!")
 
     except Exception as e:
-        st.error(f"Error processing video: {e}")
-        progress_bar.empty()
-        status_text.empty()
+        st.error(f"Error: {e}")
+        progress.empty()
 
-def display_timeline_preview():
-    project = st.session_state.processed_project
-    st.subheader("🎵 Audio Timeline")
-    duration = int(project.get('audio_analysis', {}).get('duration', 30))
-    timeline_data = np.zeros(duration*10)
-    st.line_chart(timeline_data)
-
-    st.subheader("📹 Clips")
-    clips = project.get('clips', [])
-    for i, clip in enumerate(clips):
-        with st.expander(f"Clip {i+1}"):
-            col1, col2, col3 = st.columns(3)
-            with col1:
-                st.write(f"Start: {clip.get('start_time', 0):.2f}s")
-                st.write(f"Duration: {clip.get('duration', 0):.2f}s")
-            with col2:
-                st.write(f"Transition: {clip.get('transition', 'None')}")
-                st.write(f"Speed: {clip.get('speed_factor', 1.0)}x")
-            with col3:
-                if st.button(f"Edit Clip {i+1}", key=f"edit_clip_{i}"):
-                    edit_clip(i)
-
-def edit_clip(clip_index):
-    st.session_state.editing_clip = clip_index
-    st.rerun()
-
-def export_video(quality):
-    if not st.session_state.processed_project:
-        st.error("No processed video to export")
-        return
-    progress_bar = st.progress(0)
-    status_text = st.empty()
+def export_video():
+    progress = st.progress(0)
     try:
-        status_text.text("Exporting video...")
-        output_path = st.session_state.export_manager.export_video(
-            st.session_state.processed_project, quality, progress_callback=lambda p: progress_bar.progress(p)
-        )
-        st.session_state.export_count += 1
-        status_text.text("✅ Export complete!")
-
-        with open(output_path, 'rb') as f:
-            st.download_button(
-                label="📥 Download Video",
-                data=f.read(),
-                file_name=f"monet_export_{int(time.time())}.mp4",
-                mime="video/mp4"
-            )
-        progress_bar.empty()
-        status_text.empty()
+        output_path = st.session_state.export_manager.export_video(st.session_state.processed_project, "High", lambda p: progress.progress(p))
+        st.success("✅ Export complete!")
+        with open(output_path,'rb') as f:
+            st.download_button("📥 Download Video", f.read(), file_name=f"monet_export_{int(time.time())}.mp4", mime="video/mp4")
+        progress.empty()
     except Exception as e:
         st.error(f"Export failed: {e}")
-        progress_bar.empty()
-        status_text.empty()
+        progress.empty()
 
-# ---------------------------
 if __name__ == "__main__":
     main()
