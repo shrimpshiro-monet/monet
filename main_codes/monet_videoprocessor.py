@@ -1,113 +1,64 @@
-
+from moviepy.editor import VideoFileClip, concatenate_videoclips, vfx
 import numpy as np
 import random
-from typing import List, Dict, Any
-import tempfile
-import os
 
 class VideoProcessor:
     def __init__(self):
-        self.temp_files = []
+        self.clips_cache = []
 
-    def process_clips(self, video_paths: List[str], audio_analysis: Dict, style_preset: str, velocity_mode: str, transition_intensity: int) -> List[Dict]:
-        """Process video clips according to beat analysis and style settings"""
-        clips = []
+    def process_clips(self, video_paths, audio_analysis, style_preset, velocity_mode, transition_intensity):
+        """Cut and process video clips based on audio beats and style"""
+        processed_clips = []
         beats = audio_analysis.get('beats', [])
-        tempo = audio_analysis.get('tempo', 120)
+        if len(beats) < 2:
+            beats = np.linspace(0, audio_analysis.get('duration', 30), 10)
 
-        # Calculate clip durations based on beats
-        if len(beats) > 1:
-            beat_intervals = np.diff(beats)
-            avg_beat_interval = float(np.mean(beat_intervals))
-        else:
-            avg_beat_interval = 60 / tempo  # fallback to tempo
-
-        total_duration = audio_analysis.get('duration', 30)
-
-        for i, video_path in enumerate(video_paths):
+        for i, path in enumerate(video_paths):
             try:
-                # Simulate video clip processing
-                original_duration = 10.0  # Simulated duration
+                clip = VideoFileClip(path)
+                
+                # Optional reverse
+                if random.random() < 0.15:  # 15% chance
+                    clip = clip.fx(vfx.time_mirror)
 
-                # Determine number of segments for this clip
-                segments_per_clip = max(1, int(total_duration / len(video_paths) / avg_beat_interval))
+                # Speed adjustment based on velocity mode
+                speed_factor = self._calculate_speed_factor(velocity_mode, audio_analysis, i)
+                clip = clip.fx(vfx.speedx, speed_factor)
 
-                # Split clip into segments
-                for segment_idx in range(segments_per_clip):
-                    start_time = (segment_idx * original_duration) / segments_per_clip
-                    segment_duration = min(avg_beat_interval * random.uniform(0.8, 1.2),
-                                         original_duration - start_time)
-
-                    if segment_duration <= 0:
-                        break
-
-                    # Apply velocity changes based on mode
-                    speed_factor = self._calculate_speed_factor(velocity_mode, audio_analysis, len(clips))
-
-                    clip_info = {
-                        'clip': f"simulated_clip_{i}_{segment_idx}",  # Placeholder for actual clip
-                        'original_path': video_path,
-                        'start_time': start_time,
-                        'duration': segment_duration,
-                        'speed_factor': speed_factor,
-                        'is_reversed': random.random() < 0.15,
-                        'style_preset': style_preset,
-                        'segment_index': segment_idx,
-                        'transition': 'fade'  # Default transition
-                    }
-
-                    clips.append(clip_info)
-
+                processed_clips.append({
+                    'clip': clip,
+                    'original_path': path,
+                    'speed_factor': speed_factor,
+                    'style_preset': style_preset
+                })
             except Exception as e:
-                print(f"Error processing video {video_path}: {str(e)}")
+                print(f"Error processing {path}: {e}")
                 continue
 
-        return clips
+        return processed_clips
 
-    def _calculate_speed_factor(self, velocity_mode: str, audio_analysis: Dict, clip_index: int) -> float:
-        """Calculate speed factor based on velocity mode and audio analysis"""
+    def _calculate_speed_factor(self, velocity_mode, audio_analysis, clip_index):
+        """Determine playback speed based on mode"""
+        tempo = audio_analysis.get('tempo', 120)
         if velocity_mode == "AI Auto":
-            # Use audio energy to determine speed
-            energy_levels = audio_analysis.get('energy_levels', [])
-            if energy_levels and clip_index < len(energy_levels):
-                energy = energy_levels[clip_index % len(energy_levels)]
-                return 0.5 + (energy * 1.5)  # Range: 0.5x to 2.0x
-
+            return np.clip(1.0 + (tempo-120)/120, 0.5, 2.0)
         elif velocity_mode == "Beat Sync":
-            # Sync to beat timing
-            tempo = audio_analysis.get('tempo', 120)
-            if tempo > 140:
-                return random.uniform(1.2, 1.8)
-            elif tempo < 80:
-                return random.uniform(0.6, 0.9)
-            else:
-                return random.uniform(0.8, 1.3)
-
+            return 1.0 + 0.5*np.sin(clip_index)  # dummy sync
         elif velocity_mode == "Smooth":
-            return random.uniform(0.8, 1.2)
-
+            return 1.0
         elif velocity_mode == "Aggressive":
             return random.choice([0.5, 0.7, 1.5, 2.0])
+        else:
+            return 1.0
 
-        return 1.0  # Default
+    def add_effects(self, final_video, enable_text_overlays, enable_effects, style_preset):
+        """Apply effects on a final VideoFileClip"""
+        clip = final_video['clip'] if isinstance(final_video, dict) else final_video
 
-    def add_effects(self, video_clip, enable_text_overlays: bool, enable_effects: bool, style_preset: str):
-        """Add effects and text overlays to the final video"""
-        # For now, return a simulated processed clip
-        return {
-            'type': 'processed_video',
-            'effects_applied': enable_effects,
-            'text_overlays': enable_text_overlays,
-            'style': style_preset,
-            'duration': 30.0  # Simulated duration
-        }
+        if enable_effects:
+            clip = clip.fx(vfx.lum_contrast, 0, 50, 128)  # dummy effect
 
-    def cleanup(self):
-        """Clean up temporary files"""
-        for temp_file in self.temp_files:
-            try:
-                if os.path.exists(temp_file):
-                    os.remove(temp_file)
-            except:
-                pass
-        self.temp_files = []
+        # For text overlays, you can use clip = clip.fx(vfx.add_text, "Hello") etc.
+
+        final_video['clip'] = clip
+        return final_video
