@@ -4,10 +4,10 @@ import tempfile
 import json
 from pathlib import Path
 import numpy as np
-from main_codes.videoprocessor import VideoProcessor
-from main_codes.audioanalyzer import AudioAnalyzer
-from main_codes.exportmanager import ExportManager
-from main_codes.transitionengine import TransitionEngine
+from main_codes.monet_videoprocessor import VideoProcessor
+from main_codes.monet_audioanalyzer import AudioAnalyzer
+from main_codes.monet_exportmanager import ExportManager
+from main_codes.monet_transitionengine import TransitionEngine
 import time
 
 # Initialize session state
