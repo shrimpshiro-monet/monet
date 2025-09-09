@@ -4,11 +4,10 @@ import tempfile
 import json
 from pathlib import Path
 import numpy as np
-from video_processor import VideoProcessor
-from audio_analyzer import AudioAnalyzer
-from ai_chat import AIChat
-from export_manager import ExportManager
-from transition_engine import TransitionEngine
+from main_codes.videoprocessor import VideoProcessor
+from main_codes.audioanalyzer import AudioAnalyzer
+from main_codes.exportmanager import ExportManager
+from main_codes.transitionengine import TransitionEngine
 import time
 
 # Initialize session state
@@ -16,8 +15,6 @@ if 'video_processor' not in st.session_state:
     st.session_state.video_processor = VideoProcessor()
 if 'audio_analyzer' not in st.session_state:
     st.session_state.audio_analyzer = AudioAnalyzer()
-if 'ai_chat' not in st.session_state:
-    st.session_state.ai_chat = AIChat()
 if 'export_manager' not in st.session_state:
     st.session_state.export_manager = ExportManager()
 if 'transition_engine' not in st.session_state:
