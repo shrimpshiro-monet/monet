@@ -7,3 +7,4 @@ tqdm
 python-dotenv
 pydub
 imageio-ffmpeg
+Pillow<10
