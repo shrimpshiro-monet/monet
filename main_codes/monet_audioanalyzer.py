@@ -1,56 +1,21 @@
+# main_codes/monet_transitionengine.py
+from moviepy.editor import concatenate_videoclips, vfx
+import random
 
-import numpy as np
-import wave
-import struct
-from typing import Dict, List, Tuple
-import scipy.signal
-import os
-
-class AudioAnalyzer:
+class TransitionEngine:
     def __init__(self):
-        self.sample_rate = 22050
+        self.transition_library = ['fade', 'slide', 'cut', 'glitch']
 
-    def analyze_audio(self, audio_path: str) -> Dict:
-        """Simple audio analysis without librosa dependencies"""
-        try:
-            # Basic audio file info using wave module for WAV files
-            # For MP3 files, we'll provide fallback analysis
-            duration = self._get_audio_duration(audio_path)
+    def apply_transitions(self, processed_clips, audio_analysis, style_preset, transition_intensity):
+        clips = [c['clip'] for c in processed_clips]
+        if not clips:
+            return None
 
-            # Generate basic beat analysis based on common patterns
-            tempo = 120.0  # Default BPM
-            beat_interval = 60.0 / tempo
-            num_beats = int(duration / beat_interval)
-            beat_times = [i * beat_interval for i in range(num_beats)]
+        # Apply simple fade transitions
+        for i in range(len(clips)-1):
+            if random.random() < 0.5:  # 50% chance to fade
+                clips[i] = clips[i].crossfadeout(0.5)
+                clips[i+1] = clips[i+1].crossfadein(0.5)
 
-            # Create synthetic energy levels with some variation
-            energy_levels = self._generate_energy_pattern(duration, tempo)
-
-            # Generate onset detection
-            onset_times = self._generate_onset_pattern(duration, tempo)
-
-            # Detect basic music structure
-            music_structure = self._analyze_basic_structure(duration, energy_levels, beat_times)
-
-            return {
-                'duration': duration,
-                'tempo': tempo,
-                'beats': beat_times,
-                'onsets': onset_times,
-                'spectral_centroids': [1000] * len(beat_times),  # Placeholder
-                'spectral_rolloff': [2000] * len(beat_times),    # Placeholder
-                'zero_crossings': [0.1] * len(beat_times),       # Placeholder
-                'mfccs': [[0] * 13] * len(beat_times),           # Placeholder
-                'chroma': [[0] * 12] * len(beat_times),          # Placeholder
-                'energy_levels': energy_levels,
-                'music_structure': music_structure,
-                'harmonic_strength': 0.6,
-                'percussive_strength': 0.4
-            }
-
-        except Exception as e:
-            print(f"Error analyzing audio: {str(e)}")
-            # Return basic fallback analysis
-            return self._get_fallback_analysis()
-
-    # Additional methods for beat detection, energy analysis, etc.
+        final_clip = concatenate_videoclips(clips, method="compose")
+        return {'clip': final_clip, 'clips': processed_clips, 'style_preset': style_preset}
