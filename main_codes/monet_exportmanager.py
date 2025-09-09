@@ -1,77 +1,24 @@
-# -*- coding: utf-8 -*-
-
-import os
+# main_codes/monet_exportmanager.py
 import tempfile
-from typing import Dict, Any, Callable, Optional, List
-import time
 
 class ExportManager:
-    def __init__(self):
-        self.quality_presets = {
-            "Low (480p)": {
-                "resolution": (854, 480),
-                "bitrate": "1000k",
-                "fps": 24,
-                "codec": "libx264",
-                "audio_bitrate": "128k"
-            },
-            "Medium (720p)": {
-                "resolution": (1280, 720),
-                "bitrate": "2500k",
-                "fps": 30,
-                "codec": "libx264",
-                "audio_bitrate": "192k"
-            },
-            "High (1080p)": {
-                "resolution": (1920, 1080),
-                "bitrate": "5000k",
-                "fps": 30,
-                "codec": "libx264",
-                "audio_bitrate": "256k"
-            },
-            "Ultra (4K)": {
-                "resolution": (3840, 2160),
-                "bitrate": "15000k",
-                "fps": 30,
-                "codec": "libx264",
-                "audio_bitrate": "320k"
-            }
+    def export_video(self, processed_project, quality, progress_callback=None):
+        clip = processed_project.get('clip')
+        if not clip:
+            raise ValueError("No clip to export")
+
+        resolutions = {
+            "Low (480p)": (854, 480),
+            "Medium (720p)": (1280, 720),
+            "High (1080p)": (1920, 1080),
+            "Ultra (4K)": (3840, 2160)
         }
+        w, h = resolutions.get(quality, (1280,720))
+        clip_resized = clip.resize(newsize=(w,h))
 
-    def export_video(self, project: Dict[str, Any], quality: str, progress_callback: Optional[Callable] = None) -> str:
-        """Export the final video with professional quality settings"""
-        try:
-            if not project or 'video' not in project:
-                raise ValueError("Invalid project data")
+        temp_file = tempfile.NamedTemporaryFile(suffix=".mp4", delete=False)
+        output_path = temp_file.name
+        temp_file.close()
 
-            preset = self.quality_presets.get(quality, self.quality_presets["Medium (720p)"])
-
-            # Create output filename
-            output_filename = f"monet_export_{self._get_timestamp()}.mp4"
-            output_path = os.path.join(tempfile.gettempdir(), output_filename)
-
-            # Simulate export progress
-            if progress_callback:
-                progress_callback(10)
-                time.sleep(0.5)
-                progress_callback(30)
-                time.sleep(0.5)
-                progress_callback(60)
-                time.sleep(0.5)
-                progress_callback(90)
-                time.sleep(0.5)
-                progress_callback(100)
-
-            # Create a dummy file to simulate export
-            with open(output_path, 'w') as f:
-                f.write(f"Simulated video export - {quality}\n")
-                f.write(f"Project clips: {len(project.get('clips', []))}\n")
-                f.write(f"Duration: {project.get('video', {}).get('total_duration', 30)}s\n")
-                f.write(f"Quality: {preset['resolution'][0]}x{preset['resolution'][1]}\n")
-
-            return output_path
-
-        except Exception as e:
-            raise Exception(f"Export failed: {str(e)}")
-
-    # Additional export methods for preview, audio-only, etc.
+        clip_resized.write_videofile(output_path, codec="libx264", audio_codec="aac", threads=4)
+        return output_path
